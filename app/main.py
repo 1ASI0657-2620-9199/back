@@ -29,7 +29,7 @@ def create_app(database_path: str | None = None, database_url: str | None = None
 
     app = FastAPI(
         title="FinanZen Financial Records Service",
-        version="0.1.0",
+        version="0.1.1",
         description=(
             "Incremento inicial de US01 y soporte parcial de PF-02: registra "
             "movimientos idempotentes y consulta un resumen mensual por usuario. "
