@@ -1,10 +1,10 @@
-# Prepared configuration. Creating these resources incurs recurring charges.
-# Apply only after the account owner accepts the compute and disk costs.
+# Free web service; persistent data lives in external Neon PostgreSQL.
+# DATABASE_URL is entered privately when creating the Blueprint.
 services:
   - type: web
     name: finanzen-financial-records
     runtime: python
-    plan: 0.5c-512mb
+    plan: free
     region: virginia
     repo: https://github.com/1ASI0657-2620-9199/back
     branch: main
@@ -15,9 +15,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: FINANZEN_DB_PATH
-        value: /var/data/financial_records.db
-    disk:
-      name: finanzen-records
-      mountPath: /var/data
-      sizeGB: 1
+      - key: DATABASE_URL
+        sync: false

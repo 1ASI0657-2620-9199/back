@@ -1,7 +1,7 @@
-# FinanZen — Deployment con datos persistentes
+﻿# FinanZen — Deployment gratuito con datos persistentes
 
-Configuración preparada el **10 de octubre de 2026** para Render.
-Estado: **pendiente de conectar la cuenta y aceptar el costo; no publicado todavía**.
+Configuración preparada el **10 de octubre de 2026** para **Render Free + Neon Free**.
+Estado: **pendiente de conectar las cuentas; todavía no hay servicio público**.
 
 ## Recursos preparados
 
@@ -9,60 +9,72 @@ Estado: **pendiente de conectar la cuenta y aceptar el costo; no publicado todav
 | --- | --- |
 | Código | `1ASI0657-2620-9199/back`, rama `main` |
 | Runtime | Python 3.11.9, FastAPI, Uvicorn |
-| Servicio | Web Service, plan `0.5c-512mb` (antes Starter), una instancia |
-| Región | Virginia |
+| Servicio API | Render Web Service, plan `free`, una instancia, Virginia |
+| Persistencia cloud | PostgreSQL en Neon Free, preferentemente región cercana a la API |
 | Build | `python -m pip install -r requirements.txt` |
 | Start | `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` |
 | Health check | `/health` |
-| Disco | 1 GB montado en `/var/data` |
-| SQLite | `FINANZEN_DB_PATH=/var/data/financial_records.db` |
+| Variable privada | `DATABASE_URL`, introducida durante la creación del Blueprint |
 | Actualizaciones | `autoDeployTrigger: checksPass` |
 
-El [Blueprint](render.yaml) define estos recursos. La base se inicializa al
-arrancar el servicio, cuando el disco ya está montado. Solo el contenido bajo
-`/var/data` se conserva entre reinicios y despliegues. El servicio es una única
-instancia; no utiliza una base SQLite incluida en el repositorio.
+El [Blueprint](render.yaml) crea únicamente el servicio gratuito. No define
+un disco de pago ni una base Render Postgres que venza a los 30 días.
+El esquema se inicializa en PostgreSQL al arrancar. Los movimientos quedan
+fuera del filesystem efímero de Render, por lo que reiniciar la API no los elimina.
 
-El backend expone Swagger en `/docs` y OpenAPI en `/openapi.json`, y funciona
-sin el repositorio del frontend. No se modifica la identidad de demostración
-basada en `X-User-Id` ni se presentan estos endpoints como autenticación real.
+El backend admite dos modos:
 
-## Costo antes de publicar
+- Sin `DATABASE_URL`: SQLite local, configurable mediante `FINANZEN_DB_PATH`.
+- Con `DATABASE_URL`: PostgreSQL, conectado mediante pg8000 y TLS verificado.
 
-Precios consultados el 10 de octubre de 2026: USD 7/mes por `0.5c-512mb` y
-USD 0.25/GB/mes por disco. La configuración de 1 GB tiene un costo base estimado
-de **USD 7.25/mes**, sin impuestos ni consumos adicionales. El workspace Hobby
-puede mantenerse sin cuota adicional. Confirmar el importe mostrado por Render
-antes de crear recursos. [Precios oficiales](https://render.com/pricing).
+En Render, la aplicación rechaza arrancar sin `DATABASE_URL` para evitar el uso
+accidental de SQLite efímero. Solo la validación en localhost permite
+`sslmode=disable`; las conexiones externas utilizan TLS.
+Swagger (`/docs`) y OpenAPI (`/openapi.json`) funcionan sin frontend.
+`X-User-Id` sigue siendo una identidad de demostración, no un login.
 
-No se aplica el Blueprint ni se crea un recurso facturable hasta que el dueño
-de la cuenta acepte este costo. Render gratuito no permite discos persistentes.
+## Planes y límites gratuitos
+
+Se utilizarán los planes **Free**, sin crear servicios de pago. Según los
+límites consultados el 10 de octubre de 2026, Neon incluye 1 GB de almacenamiento
+y 100 CU-horas al mes por proyecto. Render Free puede dormir tras 15 minutos
+sin tráfico; las primeras solicitudes pueden tardar mientras se reactiva.
+El almacenamiento de Neon es independiente de esos reinicios de Render.
+La gratuidad está sujeta a las cuotas y condiciones de cada proveedor.
+La opción de Render con disco se descartó por requerir pago.
 
 ## Publicación
 
-Con la cuenta conectada y el costo aceptado:
+La creación e integración desde el agente requieren las cuentas conectadas:
 
-1. Crear un Blueprint desde el repositorio `back` utilizando `render.yaml`.
-2. Revisar plan, región, disco, comandos y variables; confirmar la creación.
-3. Esperar que el build y el deploy finalicen y que el estado del servicio sea Live.
-4. Registrar la URL HTTPS real asignada por Render, ID de deploy y commit publicado.
-5. Verificar `/health`, `/docs` y `/openapi.json` en esa URL.
-6. Ejecutar la colección de Postman contra la URL pública y conservar resultados.
-7. Registrar un movimiento de muestra, reiniciar el servicio y consultar el mismo
-   usuario para comprobar que el movimiento permanece en SQLite.
+1. Crear un proyecto Neon Free y obtener su connection string PostgreSQL.
+2. Crear un Blueprint de Render desde `back`, verificando `plan: free`.
+3. Introducir la conexión en `DATABASE_URL` como variable privada; no incluirla
+   en commits, capturas o archivos del reporte.
+4. Esperar que build/deploy terminen y el servicio esté Live.
+5. Registrar la URL HTTPS real, ID de deploy y commit publicado.
+6. Verificar `/health`, `/docs`, `/openapi.json` y la colección Postman en esa URL.
+7. Registrar un movimiento, reiniciar/redeployar el servicio y consultar el mismo
+   usuario para demostrar persistencia.
 
-La persistencia en Render debe comprobarse después de publicar; una verificación
-local de reinicios no demuestra por sí sola que el disco cloud esté montado.
+No se inventa una URL mientras el servicio no existe. Las pruebas PostgreSQL
+locales no demuestran que las cuentas cloud estén configuradas. Las bases SQLite
+originales se conservan localmente; no se publican ni se importan automáticamente a Neon.
 
-## Evidencias
+## Validación
 
-El reporte conservará configuración, logs de build/deploy, URL, commit,
-respuestas reales y capturas de Swagger. Las capturas locales están identificadas
-por su entorno y no sustituyen las evidencias del servicio público.
+Cinco pruebas SQLite y tres pruebas de integración PostgreSQL comprueban
+contratos, idempotencia, aislamiento y persistencia al recrear la aplicación.
+La integración incluye ocho POST concurrentes que deben producir un único
+movimiento. El workflow utiliza PostgreSQL 17 real.
+Para ejecutar la integración, configurar `TEST_DATABASE_URL` hacia una base
+PostgreSQL de pruebas y ejecutar `python -m pytest -q`. Esta variable no
+selecciona la base del servidor; `DATABASE_URL` sí lo hace.
 
 ## Referencias
 
 - [FastAPI en Render](https://render.com/docs/deploy-fastapi).
-- [Discos persistentes y sus restricciones](https://render.com/docs/disks).
+- [Límites de Render Free](https://render.com/docs/free).
 - [Blueprint y validación](https://render.com/docs/blueprint-spec).
-- [Identificadores de planes](https://render.com/docs/compute-plans).
+- [Neon Free](https://neon.com/blog/neon-free-plan-1-gb-per-project).
+- [Driver pg8000](https://pypi.org/project/pg8000/).

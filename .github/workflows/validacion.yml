@@ -10,6 +10,21 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: finanzen-ci
+          POSTGRES_DB: finanzen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d finanzen_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:finanzen-ci@127.0.0.1:5432/finanzen_test?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

@@ -1,7 +1,8 @@
 # FinanZen — Back
 
 Repositorio independiente del backend de FinanZen: **Financial Records Service**
-con Python, FastAPI, Pydantic y SQLite.
+con Python, FastAPI y Pydantic. Utiliza SQLite local o PostgreSQL mediante
+`DATABASE_URL` para conservar datos fuera del servidor cloud.
 
 [Todos los repositorios](https://github.com/orgs/1ASI0657-2620-9199/repositories) ·
 [Reporte](https://github.com/1ASI0657-2620-9199/report) ·
@@ -14,6 +15,7 @@ back/
 ├── app/
 │   ├── main.py
 │   ├── models.py
+│   ├── database.py        Conexiones SQLite/PostgreSQL y transacciones
 │   └── repository.py
 ├── data/                 SQLite generado al arrancar
 ├── tests/test_api.py
@@ -67,6 +69,9 @@ $env:FINANZEN_DB_PATH = 'C:\ruta\a\financial_records.db'
 Estas variables son opcionales. La base predeterminada es
 `data/financial_records.db`, relativa al directorio de ejecución del servidor.
 
+`DATABASE_URL` selecciona PostgreSQL para despliegue. La configuración gratuita
+preparada utiliza Neon como almacenamiento y Render para la API.
+
 ## API disponible
 
 | Método | Ruta | Función |
@@ -86,9 +91,9 @@ alertas, IA, educación, IoT y auditoría permanecen pendientes.
 
 ## Deployment
 
-[Configuración de Render con SQLite persistente](DEPLOYMENT.md) y
-[Blueprint](render.yaml). La publicación requiere conectar la cuenta y aceptar
-el costo del servicio y disco; consultar el estado y recursos en la guía.
+[Configuración gratuita Render + Neon](DEPLOYMENT.md) y [Blueprint](render.yaml).
+La publicación requiere conectar las cuentas y configurar `DATABASE_URL` como
+variable privada. La aplicación no usa SQLite efímero cuando arranca en Render.
 
 ## Pruebas
 
@@ -103,5 +108,10 @@ resumen y filtrado por usuario, frontend configurable, API sin frontend y
 conservación de movimientos/idempotencia al recrear la aplicación con el mismo
 archivo SQLite seleccionado mediante `FINANZEN_DB_PATH`.
 El workflow repite la suite sin depender de los demás repositorios.
+
+`tests/test_postgres.py` añade tres pruebas de integración PostgreSQL real,
+incluyendo persistencia e idempotencia concurrente. Se ejecutan cuando existe
+`TEST_DATABASE_URL`; el workflow proporciona esa base de pruebas. Sin esa
+variable se omiten las tres y se ejecutan las cinco pruebas SQLite.
 
 [Evidencia de validación](https://github.com/1ASI0657-2620-9199/report/blob/main/evidencias/validacion.md)

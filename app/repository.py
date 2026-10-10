@@ -1,11 +1,10 @@
 import hashlib
 import json
-import sqlite3
 from datetime import datetime, timezone
 from decimal import Decimal
-from pathlib import Path
 from uuid import uuid4
 
+from .database import Database
 from .models import MonthlySummary, TransactionCreate, TransactionResponse, TransactionType
 
 
@@ -14,12 +13,12 @@ class IdempotencyConflictError(Exception):
 
 
 class FinancialRecordsRepository:
-    def __init__(self, database_path: str) -> None:
+    def __init__(self, database_path: str, database_url: str | None = None) -> None:
         self.database_path = database_path
+        self.database = Database(database_path, database_url)
 
     def initialize(self) -> None:
-        if self.database_path != ":memory:":
-            Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
+        self.database.prepare_directory()
         with self._connect() as connection:
             connection.execute(
                 """
@@ -53,7 +52,14 @@ class FinancialRecordsRepository:
     ) -> tuple[TransactionResponse, bool]:
         request_hash = self._request_hash(transaction)
         with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+            if self.database.postgres:
+                # Serialize concurrent attempts for the same identity/key.
+                # Transaction-scoped locks also work with Neon's pooler.
+                identity = json.dumps([user_id, idempotency_key]).encode()
+                lock_id = int.from_bytes(hashlib.sha256(identity).digest()[:8], signed=True)
+                connection.execute("SELECT pg_advisory_xact_lock(?)", (lock_id,))
+            else:
+                connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 "SELECT * FROM transactions WHERE user_id = ? AND idempotency_key = ?",
                 (user_id, idempotency_key),
@@ -132,10 +138,8 @@ class FinancialRecordsRepository:
             transaction_count=len(rows),
         )
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def _connect(self):
+        return self.database.connect()
 
     @staticmethod
     def _request_hash(transaction: TransactionCreate) -> str:
@@ -144,7 +148,7 @@ class FinancialRecordsRepository:
         return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
-    def _to_response(row: sqlite3.Row) -> TransactionResponse:
+    def _to_response(row: dict) -> TransactionResponse:
         return TransactionResponse(
             id=row["id"],
             user_id=row["user_id"],

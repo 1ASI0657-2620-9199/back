@@ -13,9 +13,13 @@ from .repository import FinancialRecordsRepository, IdempotencyConflictError
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-def create_app(database_path: str | None = None) -> FastAPI:
+def create_app(database_path: str | None = None, database_url: str | None = None) -> FastAPI:
+    configured_url = database_url or (os.getenv("DATABASE_URL") if database_path is None else None)
+    if os.getenv("RENDER") == "true" and not configured_url and database_path is None:
+        raise RuntimeError("Configure DATABASE_URL before deploying to Render")
     repository = FinancialRecordsRepository(
-        database_path or os.getenv("FINANZEN_DB_PATH", "data/financial_records.db")
+        database_path or os.getenv("FINANZEN_DB_PATH", "data/financial_records.db"),
+        database_url=configured_url,
     )
 
     @asynccontextmanager
