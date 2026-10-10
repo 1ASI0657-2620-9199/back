@@ -84,6 +84,12 @@ cuerpo devuelve HTTP 409.
 `X-User-Id` simula identidad; no autentica usuarios. Presupuestos recomendados,
 alertas, IA, educación, IoT y auditoría permanecen pendientes.
 
+## Deployment
+
+[Configuración de Render con SQLite persistente](DEPLOYMENT.md) y
+[Blueprint](render.yaml). La publicación requiere conectar la cuenta y aceptar
+el costo del servicio y disco; consultar el estado y recursos en la guía.
+
 ## Pruebas
 
 Dentro de este repositorio, con las dependencias instaladas:
@@ -92,8 +98,10 @@ Dentro de este repositorio, con las dependencias instaladas:
 python -m pytest -q
 ```
 
-Las cuatro pruebas usan bases temporales y cubren idempotencia/conflictos,
-resumen y filtrado por usuario, frontend configurable y API sin frontend.
+Las cinco pruebas usan bases temporales y cubren idempotencia/conflictos,
+resumen y filtrado por usuario, frontend configurable, API sin frontend y
+conservación de movimientos/idempotencia al recrear la aplicación con el mismo
+archivo SQLite seleccionado mediante `FINANZEN_DB_PATH`.
 El workflow repite la suite sin depender de los demás repositorios.
 
 [Evidencia de validación](https://github.com/1ASI0657-2620-9199/report/blob/main/evidencias/validacion.md)

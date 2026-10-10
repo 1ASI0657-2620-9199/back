@@ -103,3 +103,23 @@ def test_backend_runs_without_frontend(tmp_path, monkeypatch):
         assert client.get("/health").json()["status"] == "ok"
         assert client.get("/docs").status_code == 200
         assert client.get("/").status_code == 404
+
+
+def test_transactions_survive_application_restart(tmp_path, monkeypatch):
+    monkeypatch.setenv("FINANZEN_DB_PATH", str(tmp_path / "persistent-records.db"))
+    headers = {"X-User-Id": "persistent-user", "Idempotency-Key": "persistent-0001"}
+    payload = transaction_payload(amount="125.50")
+
+    with TestClient(create_app()) as client:
+        created = client.post("/api/v1/transactions", json=payload, headers=headers)
+        assert created.status_code == 201
+        movement_id = created.json()["id"]
+
+    with TestClient(create_app()) as restarted:
+        movements = restarted.get("/api/v1/transactions", headers=headers)
+        replay = restarted.post("/api/v1/transactions", json=payload, headers=headers)
+
+    assert movements.status_code == 200
+    assert [movement["id"] for movement in movements.json()] == [movement_id]
+    assert replay.status_code == 200
+    assert replay.json()["id"] == movement_id
