@@ -1,7 +1,10 @@
 ﻿# FinanZen — Deployment gratuito con datos persistentes
 
 Configuración preparada el **10 de octubre de 2026** para **Render Free + Neon Free**.
-Estado: **pendiente de conectar las cuentas; todavía no hay servicio público**.
+Estado: **publicación pendiente de acceso a las herramientas cloud; todavía no hay URL pública verificada**.
+El usuario informó que conectó Render y Neon; el catálogo confirma ambos plugins
+instalados. Esta sesión no dispone de sus herramientas para crear o inspeccionar
+recursos. Continuar desde un chat nuevo compatible con esas integraciones.
 
 ## Recursos preparados
 
