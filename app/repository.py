@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+from finanzen_common import FingerprintService
+
 from .database import Database
 from .models import MonthlySummary, TransactionCreate, TransactionResponse, TransactionType
 
@@ -144,8 +146,7 @@ class FinancialRecordsRepository:
     @staticmethod
     def _request_hash(transaction: TransactionCreate) -> str:
         payload = transaction.model_dump(mode="json")
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-        return hashlib.sha256(encoded).hexdigest()
+        return FingerprintService().fingerprint(payload)
 
     @staticmethod
     def _to_response(row: dict) -> TransactionResponse:
