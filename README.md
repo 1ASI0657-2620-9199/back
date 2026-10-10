@@ -23,7 +23,12 @@ back/
 │   └── repository.py
 ├── data/                 SQLite generado al arrancar
 ├── tests/test_api.py
+├── tests/test_postgres.py
+├── tests/test_common.py
+├── features/             Escenarios Gherkin y pasos Behave
+├── libraries/finanzen_common/  Paquete reutilizable independiente
 ├── requirements.txt
+├── requirements-dev.txt
 └── .github/workflows/validacion.yml
 ```
 
@@ -117,6 +122,29 @@ El workflow repite la suite sin depender de los demás repositorios.
 `tests/test_postgres.py` añade tres pruebas de integración PostgreSQL real,
 incluyendo persistencia e idempotencia concurrente. Se ejecutan cuando existe
 `TEST_DATABASE_URL`; el workflow proporciona esa base de pruebas. Sin esa
-variable se omiten las tres y se ejecutan las cinco pruebas SQLite.
+variable se omiten las tres pruebas PostgreSQL. Además se ejecutan cuatro
+pruebas de `finanzen-common`: compatibilidad con las huellas existentes,
+orden de claves, cambios de contenido y sustitución de estrategia.
+Resultado con PostgreSQL: **12 pruebas**, nueve sin PostgreSQL.
+
+Para ejecutar BDD y construir la biblioteca desde `back`:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m behave features --junit --junit-directory reports/bdd
+python -m build libraries/finanzen_common
+```
+
+Los seis escenarios locales cubren registro, repetición, conflicto, resumen
+y aislamiento, mes inválido y persistencia al recrear la aplicación. Para
+probar la API pública con datos sintéticos únicos:
+
+```powershell
+python -m behave features --tags="not @local" -D base_url=https://finanzen-financial-records.onrender.com
+```
+
+La recreación local se excluye de la prueba pública; el reinicio real de
+Render tiene su evidencia separada. El workflow ejecuta pytest, BDD y el
+build del paquete y conserva JUnit, wheel y sdist como artefactos.
 
 [Evidencia de validación](https://github.com/1ASI0657-2620-9199/report/blob/main/evidencias/validacion.md)
