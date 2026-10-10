@@ -1,26 +1,34 @@
 ﻿# FinanZen — Deployment gratuito con datos persistentes
 
-Configuración preparada el **10 de octubre de 2026** para **Render Free + Neon Free**.
-Estado: **publicación pendiente de acceso a las herramientas cloud; todavía no hay URL pública verificada**.
-El usuario informó que conectó Render y Neon; el catálogo confirma ambos plugins
-instalados. Esta sesión no dispone de sus herramientas para crear o inspeccionar
-recursos. Continuar desde un chat nuevo compatible con esas integraciones.
+Publicado y verificado el **10 de octubre de 2026** con **Render Free + Neon Free**.
+Estado: **Live**, con datos PostgreSQL conservados después de reiniciar Render.
 
-## Recursos preparados
+- API: https://finanzen-financial-records.onrender.com
+- Swagger: https://finanzen-financial-records.onrender.com/docs
+- Health: https://finanzen-financial-records.onrender.com/health
+- OpenAPI: https://finanzen-financial-records.onrender.com/openapi.json
+- [Capturas, grabación y registros reales](https://github.com/1ASI0657-2620-9199/report/blob/main/evidencias/deployment/publico/README.md).
+
+Servicio Render: `srv-db4vl25ckfvc738e4hp0`.
+Deploy inicial: `dep-db4vl2tckfvc738e4j60`, commit `525ac3f`, estado `live`.
+Neon: proyecto `dawn-bird-07958545`, PostgreSQL 17 en `aws-us-east-1`.
+
+## Recursos desplegados
 
 | Recurso | Configuración |
 | --- | --- |
 | Código | `1ASI0657-2620-9199/back`, rama `main` |
 | Runtime | Python 3.11.9, FastAPI, Uvicorn |
 | Servicio API | Render Web Service, plan `free`, una instancia, Virginia |
-| Persistencia cloud | PostgreSQL en Neon Free, preferentemente región cercana a la API |
+| Persistencia cloud | PostgreSQL 17 en Neon Free, AWS US East 1, compute 0.25 CU |
 | Build | `python -m pip install -r requirements.txt` |
 | Start | `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` |
 | Health check | `/health` |
-| Variable privada | `DATABASE_URL`, introducida durante la creación del Blueprint |
+| Variable privada | `DATABASE_URL`, configurada durante la creación por la API de Render |
 | Actualizaciones | `autoDeployTrigger: checksPass` |
 
-El [Blueprint](render.yaml) crea únicamente el servicio gratuito. No define
+El servicio se creó por la API oficial de Render aplicando la configuración del
+[Blueprint](render.yaml), que define únicamente el servicio gratuito. No define
 un disco de pago ni una base Render Postgres que venza a los 30 días.
 El esquema se inicializa en PostgreSQL al arrancar. Los movimientos quedan
 fuera del filesystem efímero de Render, por lo que reiniciar la API no los elimina.
@@ -38,20 +46,21 @@ Swagger (`/docs`) y OpenAPI (`/openapi.json`) funcionan sin frontend.
 
 ## Planes y límites gratuitos
 
-Se utilizarán los planes **Free**, sin crear servicios de pago. Según los
+Se verificaron y utilizaron los planes **Free**, sin crear servicios de pago. Según los
 límites consultados el 10 de octubre de 2026, Neon incluye 1 GB de almacenamiento
 y 100 CU-horas al mes por proyecto. Render Free puede dormir tras 15 minutos
 sin tráfico; las primeras solicitudes pueden tardar mientras se reactiva.
 El almacenamiento de Neon es independiente de esos reinicios de Render.
 La gratuidad está sujeta a las cuotas y condiciones de cada proveedor.
-La opción de Render con disco se descartó por requerir pago.
 
-## Publicación
+## Reproducir la publicación
 
-La creación e integración desde el agente requieren las cuentas conectadas:
+La publicación realizada utilizó Neon CLI con autorización del usuario y la API
+oficial de Render. Para reproducirla en otra cuenta:
 
 1. Crear un proyecto Neon Free y obtener su connection string PostgreSQL.
-2. Crear un Blueprint de Render desde `back`, verificando `plan: free`.
+2. Crear Render Web Service desde `back/main` con la configuración del Blueprint,
+   verificando `plan: free`; usar el Dashboard, API o una integración disponible.
 3. Introducir la conexión en `DATABASE_URL` como variable privada; no incluirla
    en commits, capturas o archivos del reporte.
 4. Esperar que build/deploy terminen y el servicio esté Live.
@@ -60,11 +69,15 @@ La creación e integración desde el agente requieren las cuentas conectadas:
 7. Registrar un movimiento, reiniciar/redeployar el servicio y consultar el mismo
    usuario para demostrar persistencia.
 
-No se inventa una URL mientras el servicio no existe. Las pruebas PostgreSQL
-locales no demuestran que las cuentas cloud estén configuradas. Las bases SQLite
-originales se conservan localmente; no se publican ni se importan automáticamente a Neon.
+Las bases SQLite originales se conservan localmente; no se importaron a Neon.
+La verificación cloud utiliza exclusivamente movimientos sintéticos de demostración.
 
 ## Validación
+
+Contra la URL pública, `/health`, `/docs` y `/openapi.json` devolvieron HTTP 200.
+Newman ejecutó ocho peticiones y once aserciones sin fallos. Después de reiniciar
+Render y comprobar el nuevo arranque en sus logs, dos movimientos conservaron
+IDs, saldo PEN 92.66 y repetición idempotente HTTP 200.
 
 Cinco pruebas SQLite y tres pruebas de integración PostgreSQL comprueban
 contratos, idempotencia, aislamiento y persistencia al recrear la aplicación.

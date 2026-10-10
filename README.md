@@ -8,6 +8,10 @@ con Python, FastAPI y Pydantic. Utiliza SQLite local o PostgreSQL mediante
 [Reporte](https://github.com/1ASI0657-2620-9199/report) ·
 [Frontend](https://github.com/1ASI0657-2620-9199/front)
 
+**API desplegada:** [Swagger público](https://finanzen-financial-records.onrender.com/docs)
+· [Health](https://finanzen-financial-records.onrender.com/health).
+Render Free + Neon Free, con persistencia comprobada tras reiniciar Render.
+
 ## Estructura
 
 ```text
@@ -70,7 +74,7 @@ Estas variables son opcionales. La base predeterminada es
 `data/financial_records.db`, relativa al directorio de ejecución del servidor.
 
 `DATABASE_URL` selecciona PostgreSQL para despliegue. La configuración gratuita
-preparada utiliza Neon como almacenamiento y Render para la API.
+publicada utiliza Neon como almacenamiento y Render para la API.
 
 ## API disponible
 
@@ -92,8 +96,9 @@ alertas, IA, educación, IoT y auditoría permanecen pendientes.
 ## Deployment
 
 [Configuración gratuita Render + Neon](DEPLOYMENT.md) y [Blueprint](render.yaml).
-La publicación requiere conectar las cuentas y configurar `DATABASE_URL` como
-variable privada. La aplicación no usa SQLite efímero cuando arranca en Render.
+La API está publicada en https://finanzen-financial-records.onrender.com.
+`DATABASE_URL` se configuró como variable privada; la aplicación usa PostgreSQL
+en Neon y conserva los movimientos al reiniciar Render.
 
 ## Pruebas
 
