@@ -16,6 +16,8 @@ venv/
 *.sqlite3
 
 # Configuración privada
+.env
+.env.*
 !.env.example
 
 # Dependencias y artefactos de futuros clientes
