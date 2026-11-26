@@ -36,12 +36,15 @@ jobs:
             requirements-dev.txt
             libraries/finanzen_common/pyproject.toml
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q --junitxml=reports/pytest.xml
       - run: python -m behave features --junit --junit-directory reports/bdd
       - run: python -m build libraries/finanzen_common
+      - run: python scripts/export_openapi.py
       - uses: actions/upload-artifact@v6
         with:
           name: bdd-and-common-library
           path: |
+            reports/pytest.xml
+            reports/openapi
             reports/bdd
             libraries/finanzen_common/dist

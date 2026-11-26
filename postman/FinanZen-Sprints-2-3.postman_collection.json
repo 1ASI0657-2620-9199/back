@@ -1,0 +1,877 @@
+{
+  "info": {
+    "name": "FinanZen — APIs Sprints 2 y 3",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Ejecutar contra app.suite local o Docker Compose con Kafka. Identidad sintética nueva por ejecución. Usar 150 ms de demora para consistencia eventual."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "userId",
+      "value": "postman-demo"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Salud integrada",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/health"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "const id = pm.variables.replaceIn(\"{{$guid}}\");",
+              "const now = new Date();",
+              "pm.collectionVariables.set(\"userId\", \"postman-\" + id);",
+              "pm.collectionVariables.set(\"transactionKey\", \"expense-\" + id);",
+              "pm.collectionVariables.set(\"readingId\", \"reading-\" + id);",
+              "pm.collectionVariables.set(\"month\", now.toISOString().slice(0, 7));",
+              "pm.collectionVariables.set(\"occurredAt\", now.toISOString());",
+              "pm.collectionVariables.set(\"weekDate\", now.toISOString().slice(0, 10));",
+              "now.setUTCDate(1); now.setUTCMonth(now.getUTCMonth() - 1);",
+              "pm.collectionVariables.set(\"previousMonth\", now.toISOString().slice(0, 7));",
+              "pm.variables.set(\"polls\", 0);",
+              "})();"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", () => pm.expect(pm.response.code).to.eql(200));",
+              "pm.test(\"Transporte declarado\", () => pm.expect(pm.response.json().transport).to.be.oneOf([\"local-durable-outbox\", \"kafka\"]));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Crear presupuesto",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/budgets",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"category\": \"food\",\n  \"month\": \"{{month}}\",\n  \"limit_amount\": \"100.00\",\n  \"alert_threshold\": 80\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 201\", function () { pm.expect(pm.response.code).to.be.oneOf([201]); });",
+              "pm.collectionVariables.set(\"budgetId\", pm.response.json().id);",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Registrar gasto",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{transactionKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/transactions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": \"cash-account\",\n  \"type\": \"expense\",\n  \"amount\": \"85.00\",\n  \"currency\": \"PEN\",\n  \"category\": \"food\",\n  \"occurred_at\": \"{{occurredAt}}\",\n  \"description\": \"Prueba de integración Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 201\", function () { pm.expect(pm.response.code).to.be.oneOf([201]); });",
+              "pm.collectionVariables.set(\"transactionId\", pm.response.json().id);",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Repetir gasto sin duplicar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{transactionKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/transactions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": \"cash-account\",\n  \"type\": \"expense\",\n  \"amount\": \"85.00\",\n  \"currency\": \"PEN\",\n  \"category\": \"food\",\n  \"occurred_at\": \"{{occurredAt}}\",\n  \"description\": \"Prueba de integración Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Mismo movimiento\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"transactionId\")));",
+              "pm.test(\"Replay\", () => pm.expect(pm.response.headers.get(\"Idempotent-Replayed\")).to.eql(\"true\"));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Rechazar clave con datos distintos",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{transactionKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/transactions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": \"cash-account\",\n  \"type\": \"expense\",\n  \"amount\": \"900.00\",\n  \"currency\": \"PEN\",\n  \"category\": \"food\",\n  \"occurred_at\": \"{{occurredAt}}\",\n  \"description\": \"Prueba de integración Postman\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 409\", function () { pm.expect(pm.response.code).to.be.oneOf([409]); });",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Esperar presupuesto actualizado",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/budgets?month={{month}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "const data = pm.response.json();",
+              "if (!data.length || Number(data[0].spent) !== 85 && Number(pm.variables.get(\"polls\") || 0) < 30) {",
+              "  pm.variables.set(\"polls\", Number(pm.variables.get(\"polls\") || 0) + 1);",
+              "  pm.execution.setNextRequest(pm.info.requestId);",
+              "} else {",
+              "  pm.variables.set(\"polls\", 0);",
+              "  pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "  pm.test(\"Gasto proyectado una vez\", () => pm.expect(Number(data[0].spent)).to.eql(85));",
+              "  pm.test(\"Cerca del límite\", () => pm.expect(data[0].status).to.eql(\"near_limit\"));",
+              "}",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Esperar alerta entregada",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/notifications"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "const data = pm.response.json();",
+              "if (!data.length || data[0].status !== \"delivered\" && Number(pm.variables.get(\"polls\") || 0) < 30) {",
+              "  pm.variables.set(\"polls\", Number(pm.variables.get(\"polls\") || 0) + 1);",
+              "  pm.execution.setNextRequest(pm.info.requestId);",
+              "} else {",
+              "  pm.variables.set(\"polls\", 0);",
+              "  pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "  pm.test(\"Una alerta\", () => pm.expect(data.length).to.eql(1));",
+              "  pm.collectionVariables.set(\"notificationId\", encodeURIComponent(data[0].id));",
+              "}",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Marcar alerta leída",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/read"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Lectura persistida\", () => pm.expect(pm.response.json().read_at).to.be.a(\"string\"));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Crear medidor simulado",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Medidor Postman\",\n  \"monthly_limit_kwh\": \"20\",\n  \"tariff_per_kwh\": \"0.75\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 201\", function () { pm.expect(pm.response.code).to.be.oneOf([201]); });",
+              "pm.collectionVariables.set(\"deviceId\", pm.response.json().id);",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Ingresar 25000 Wh",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/simulate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reading_id\": \"{{readingId}}\",\n  \"value\": \"25000\",\n  \"unit\": \"Wh\",\n  \"occurred_at\": \"{{occurredAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 201\", function () { pm.expect(pm.response.code).to.be.oneOf([201]); });",
+              "pm.collectionVariables.set(\"canonicalReadingId\", pm.response.json().id);",
+              "pm.test(\"Normaliza a 25 kWh\", () => pm.expect(Number(pm.response.json().value)).to.eql(25));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Reenviar lectura sin duplicar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/simulate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reading_id\": \"{{readingId}}\",\n  \"value\": \"25000\",\n  \"unit\": \"Wh\",\n  \"occurred_at\": \"{{occurredAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Misma lectura\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"canonicalReadingId\")));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Rechazar lectura conflictiva",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/simulate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reading_id\": \"{{readingId}}\",\n  \"value\": \"50000\",\n  \"unit\": \"Wh\",\n  \"occurred_at\": \"{{occurredAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 409\", function () { pm.expect(pm.response.code).to.be.oneOf([409]); });",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Consultar consumo estimado",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/consumption?month={{month}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "const data = pm.response.json();",
+              "pm.test(\"Una lectura única\", () => pm.expect(data.reading_count).to.eql(1));",
+              "pm.test(\"Costo estimado\", () => pm.expect(Number(data.estimated_cost)).to.eql(18.75));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Esperar alerta de dispositivo",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/notifications"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "const data = pm.response.json();",
+              "if (!data.some(n => n.kind === \"device\" && n.status === \"delivered\") && Number(pm.variables.get(\"polls\") || 0) < 30) {",
+              "  pm.variables.set(\"polls\", Number(pm.variables.get(\"polls\") || 0) + 1);",
+              "  pm.execution.setNextRequest(pm.info.requestId);",
+              "} else {",
+              "  pm.variables.set(\"polls\", 0);",
+              "  pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "  pm.test(\"Alerta de consumo\", () => pm.expect(data.some(n => n.kind === \"device\")).to.eql(true));",
+              "}",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 IoT no crea movimientos financieros",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/transactions"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Solo el gasto original\", () => pm.expect(pm.response.json().length).to.eql(1));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Aislar otro usuario",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}-other"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Sin dispositivos ajenos\", () => pm.expect(pm.response.json()).to.eql([]));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Revocar conexión",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/connection"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Desconectado\", () => pm.expect(pm.response.json().active).to.eql(false));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Rechazar lecturas revocadas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/simulate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reading_id\": \"{{readingId}}\",\n  \"value\": \"25000\",\n  \"unit\": \"Wh\",\n  \"occurred_at\": \"{{occurredAt}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 409\", function () { pm.expect(pm.response.code).to.be.oneOf([409]); });",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Reconectar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/devices/{{deviceId}}/connection"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Consultar reporte semanal",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/reports/weekly?week_start={{weekDate}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Gasto semanal\", () => pm.expect(Number(pm.response.json().expenses)).to.eql(85));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Ingreso histórico para recomendación",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "history-{{transactionKey}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/transactions",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": \"cash-account\",\n  \"type\": \"income\",\n  \"amount\": \"2000.00\",\n  \"currency\": \"PEN\",\n  \"category\": \"salary\",\n  \"occurred_at\": \"{{previousMonth}}-03T12:00:00Z\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 201\", function () { pm.expect(pm.response.code).to.be.oneOf([201]); });",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Esperar recomendación",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/budget-recommendations?month={{month}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "const data = pm.response.json();",
+              "if (pm.response.code !== 200 && Number(pm.variables.get(\"polls\") || 0) < 30) {",
+              "  pm.variables.set(\"polls\", Number(pm.variables.get(\"polls\") || 0) + 1);",
+              "  pm.execution.setNextRequest(pm.info.requestId);",
+              "} else {",
+              "  pm.variables.set(\"polls\", 0);",
+              "  pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "  pm.test(\"Reserva para ahorro\", () => pm.expect(Number(data.savings_target)).to.eql(400));",
+              "  pm.test(\"Distribuye 1600\", () => pm.expect(data.budgets.reduce((sum, b) => sum + Number(b.limit_amount), 0)).to.eql(1600));",
+              "}",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Guardar preferencias",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/notification-preferences",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"budget_enabled\": false,\n  \"device_enabled\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Preferencias\", () => pm.expect(pm.response.json().budget_enabled).to.eql(false));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 OpenAPI de cada servicio",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-User-Id",
+            "value": "{{userId}}"
+          }
+        ],
+        "url": "{{baseUrl}}/services/devices/openapi.json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(function () {",
+              "pm.test(\"HTTP 200\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+              "pm.test(\"Contrato de telemetría\", () => pm.expect(pm.response.json().paths).to.have.property(\"/api/v1/devices/{device_id}/readings\"));",
+              "})();"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

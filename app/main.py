@@ -9,11 +9,12 @@ from fastapi.staticfiles import StaticFiles
 
 from .models import HealthResponse, MonthlySummary, TransactionCreate, TransactionResponse
 from .repository import FinancialRecordsRepository, IdempotencyConflictError
+from .kafka_transport import broker_lifespan, broker_status
 
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-def create_app(database_path: str | None = None, database_url: str | None = None) -> FastAPI:
+def create_app(database_path: str | None = None, database_url: str | None = None, *, serve_frontend: bool = True) -> FastAPI:
     configured_url = database_url or (os.getenv("DATABASE_URL") if database_path is None else None)
     if os.getenv("RENDER") == "true" and not configured_url and database_path is None:
         raise RuntimeError("Configure DATABASE_URL before deploying to Render")
@@ -23,20 +24,23 @@ def create_app(database_path: str | None = None, database_url: str | None = None
     )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(application: FastAPI):
         repository.initialize()
-        yield
+        async with broker_lifespan(application, repository, "financial"):
+            yield
 
     app = FastAPI(
         title="FinanZen Financial Records Service",
-        version="0.1.1",
+        version="0.3.0",
+        root_path=os.getenv("SERVICE_ROOT_PATH", ""),
         description=(
-            "Incremento inicial de US01 y soporte parcial de PF-02: registra "
-            "movimientos idempotentes y consulta un resumen mensual por usuario. "
-            "Los presupuestos recomendados, alertas y reportes semanales están pendientes."
+            "Registra movimientos idempotentes y consulta el resumen mensual. "
+            "Cada movimiento se confirma junto con TransactionRecorded en su Outbox. "
+            "Budget, Notification y Device Integration tienen aplicaciones y bases propias."
         ),
         lifespan=lifespan,
     )
+    app.state.repository = repository
 
     @app.exception_handler(IdempotencyConflictError)
     async def idempotency_conflict_handler(_, __):
@@ -47,9 +51,13 @@ def create_app(database_path: str | None = None, database_url: str | None = None
             },
         )
 
-    @app.get("/health", response_model=HealthResponse, tags=["Operations"])
-    def health() -> HealthResponse:
-        return HealthResponse(status="ok", service="financial-records-service")
+    @app.get("/health", tags=["Operations"])
+    def health():
+        return {"status": "ok", "service": "financial-records-service", **broker_status(app, repository)}
+
+    @app.get("/operations/events", tags=["Operations"])
+    def events():
+        return broker_status(app, repository)
 
     @app.post(
         "/api/v1/transactions",
@@ -106,7 +114,7 @@ def create_app(database_path: str | None = None, database_url: str | None = None
             str(Path(__file__).resolve().parents[2] / "front"),
         )
     )
-    if frontend_path.is_dir():
+    if serve_frontend and frontend_path.is_dir():
         app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
     return app

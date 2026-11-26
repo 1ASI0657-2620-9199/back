@@ -1,0 +1,159 @@
+name: finanzen
+
+x-api: &api
+  image: finanzen-api:dev
+  build:
+    context: .
+    target: runtime
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 45s
+  depends_on:
+    kafka-init:
+      condition: service_completed_successfully
+  networks: [finanzen]
+
+x-events: &events
+  EVENT_TRANSPORT: kafka
+  KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+
+services:
+  kafka-permissions:
+    image: python:3.11-slim
+    user: "0:0"
+    command: ["python", "-c", "import os; os.chown('/kafka', 1000, 1000)"]
+    volumes:
+      - kafka-data:/kafka
+    network_mode: none
+
+  kafka:
+    image: apache/kafka:4.1.2
+    hostname: kafka
+    depends_on:
+      kafka-permissions:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: CONTROLLER://:29093,PLAINTEXT_HOST://:9092,PLAINTEXT://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_HOST://127.0.0.1:${KAFKA_PORT:-9092},PLAINTEXT://kafka:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:19092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 8s
+      start_period: 30s
+      retries: 12
+    mem_limit: 1g
+    networks: [finanzen]
+
+  kafka-init:
+    image: apache/kafka:4.1.2
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in finanzen.transactions.v1 finanzen.budget-thresholds.v1 finanzen.telemetry.v1 finanzen.notification-results.v1 finanzen.notification-delivery.dlq finanzen.transactions.v1.budgets.dlq finanzen.budget-thresholds.v1.notifications.dlq finanzen.telemetry.v1.notifications.dlq; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 1 --config retention.ms=604800000;
+        done
+    networks: [finanzen]
+
+  financial-records:
+    <<: *api
+    environment:
+      <<: *events
+      FINANZEN_DB_PATH: /data/financial_records.db
+      FINANZEN_FRONTEND_PATH: /nonexistent
+      SERVICE_ROOT_PATH: /services/financial
+    volumes:
+      - financial-data:/data
+
+  budget-service:
+    <<: *api
+    command: ["python", "-m", "uvicorn", "services.budgets.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      <<: *events
+      BUDGET_DB_PATH: /data/budgets.db
+      SERVICE_ROOT_PATH: /services/budgets
+    volumes:
+      - budget-data:/data
+
+  notification-service:
+    <<: *api
+    command: ["python", "-m", "uvicorn", "services.notifications.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      <<: *events
+      NOTIFICATION_DB_PATH: /data/notifications.db
+      SERVICE_ROOT_PATH: /services/notifications
+      FINANZEN_NOTIFICATION_SIMULATE_FAILURE: ${FINANZEN_NOTIFICATION_SIMULATE_FAILURE:-0}
+    volumes:
+      - notification-data:/data
+
+  device-service:
+    <<: *api
+    command: ["python", "-m", "uvicorn", "services.devices.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      <<: *events
+      TELEMETRY_DB_PATH: /data/telemetry.db
+      SERVICE_ROOT_PATH: /services/devices
+    volumes:
+      - telemetry-data:/data
+
+  web:
+    image: finanzen-web:dev
+    build:
+      context: ${FRONTEND_CONTEXT:-../front}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+    depends_on:
+      financial-records:
+        condition: service_healthy
+      budget-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [finanzen]
+
+  tests:
+    profiles: [test]
+    image: finanzen-tests:dev
+    build:
+      context: .
+      target: tests
+    networks: [finanzen]
+
+volumes:
+  financial-data:
+  budget-data:
+  notification-data:
+  telemetry-data:
+  kafka-data:
+
+networks:
+  finanzen:

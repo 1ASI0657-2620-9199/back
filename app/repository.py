@@ -7,7 +7,12 @@ from uuid import uuid4
 from finanzen_common import FingerprintService
 
 from .database import Database
+from .eventing import Event, enqueue, initialize_event_tables
 from .models import MonthlySummary, TransactionCreate, TransactionResponse, TransactionType
+
+
+def utc_datetime(value: datetime) -> datetime:
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
 
 
 class IdempotencyConflictError(Exception):
@@ -45,6 +50,14 @@ class FinancialRecordsRepository:
                 "CREATE INDEX IF NOT EXISTS idx_transactions_owner_date "
                 "ON transactions(user_id, occurred_at)"
             )
+            initialize_event_tables(connection)
+            # Upgrade existing Sprint 1 data without changing its IDs or hashes.
+            for row in connection.execute("SELECT * FROM transactions").fetchall():
+                transaction = self._to_response(row)
+                if row["occurred_at"] != transaction.occurred_at.isoformat():
+                    connection.execute("UPDATE transactions SET occurred_at = ? WHERE id = ?",
+                                       (transaction.occurred_at.isoformat(), transaction.id))
+                enqueue(connection, self._recorded_event(transaction))
 
     def create_transaction(
         self,
@@ -90,7 +103,7 @@ class FinancialRecordsRepository:
                     str(transaction.amount),
                     transaction.currency,
                     transaction.category,
-                    transaction.occurred_at.isoformat(),
+                    utc_datetime(transaction.occurred_at).isoformat(),
                     transaction.description,
                     created_at.isoformat(),
                 ),
@@ -98,7 +111,18 @@ class FinancialRecordsRepository:
             row = connection.execute(
                 "SELECT * FROM transactions WHERE id = ?", (transaction_id,)
             ).fetchone()
-            return self._to_response(row), False
+            created = self._to_response(row)
+            enqueue(connection, self._recorded_event(created))
+            return created, False
+
+    @staticmethod
+    def _recorded_event(transaction: TransactionResponse) -> Event:
+        return Event(
+            event_id="transaction:" + transaction.id,
+            event_type="TransactionRecorded",
+            occurred_at=transaction.created_at,
+            payload=transaction.model_dump(mode="json"),
+        )
 
     def list_transactions(self, user_id: str) -> list[TransactionResponse]:
         with self._connect() as connection:
@@ -158,7 +182,7 @@ class FinancialRecordsRepository:
             amount=Decimal(row["amount"]),
             currency=row["currency"],
             category=row["category"],
-            occurred_at=datetime.fromisoformat(row["occurred_at"]),
+            occurred_at=utc_datetime(datetime.fromisoformat(row["occurred_at"])),
             description=row["description"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )

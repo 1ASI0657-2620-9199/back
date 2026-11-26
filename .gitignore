@@ -16,6 +16,9 @@ venv/
 *.sqlite3
 
 # Configuración privada
+.env
+.env.*
+temp_auto_push.bat
 !.env.example
 
 # Dependencias y artefactos de futuros clientes
