@@ -21,6 +21,13 @@ y Apache Kafka, con cinco volúmenes separados. [Guía de ejecución, DLQs,
 pruebas y recuperación](DOCKER.md). El modo local sin Docker también se conserva
 para desarrollo rápido y pruebas.
 
+Para una presentación, `scripts/iniciar_demostracion.cmd` inicia el stack y abre
+el navegador. Con el stack activo, `python scripts/preparar_demostracion.py`
+crea una cuenta nueva para el recorrido en vivo; añadir `--completa` crea otra
+con el escenario terminado como respaldo. Los comandos imprimen la identidad
+para elegirla en **Cuenta demo**. El manual PDF y su guion están en
+[report/entrega](https://github.com/1ASI0657-2620-9199/report/tree/main/entrega).
+
 ## Ejecutar API y panel juntos
 
 Requiere Python 3.11 y tener back/ y front/ dentro de la misma carpeta.
